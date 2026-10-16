@@ -61,3 +61,11 @@ Installable PWA, performance, optional persistent conversation history with user
 
 ## 10. Open decision
 Choose visitor-provided API keys versus Box Signal-funded hosted access before implementing live chat.
+
+## 11. Portable Dot Bot — first implementation
+- Homepage button opens a Document Picture-in-Picture floating companion on supporting browsers (notably Chromium desktop browsers), subject to browser permissions.
+- Unsupported browsers fall back to a separate popup window, which is not guaranteed always-on-top; popup blockers may instead navigate to the companion page.
+- Companion page is /companion.html with a responsive Dot Bot character and clearly labelled scripted replies.
+- This is not a browser extension and cannot inject Dot Bot into arbitrary sites.
+- Future milestone: secure live AI conversations inside the portable window, with chosen API cost/key handling model.
+- Verify live deployment and test Chrome/Edge/Firefox, mobile, popup blocking and accessibility.
