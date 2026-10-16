@@ -16,7 +16,7 @@ export default async function handler(req,res){
   if(messages.some(m=>!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>1600)||messages.at(-1).role!=='user')return res.status(400).json({error:'Invalid conversation.'});
   // This in-memory limit is best effort per server instance, not distributed protection.
   const ip=(req.headers['x-forwarded-for']||'unknown').split(',')[0].trim();
-  const now=Date.now(),windowMs=60*60*1000,limit=5;
+  const now=Date.now(),windowMs=60*60*1000,limit=20;
   const store=globalThis.__dotbotRateLimit||(globalThis.__dotbotRateLimit=new Map());
   for(const [k,v] of store){if(v.until<now)store.delete(k)}
   const entry=store.get(ip)||{count:0,until:now+windowMs};
