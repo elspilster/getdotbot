@@ -1,5 +1,5 @@
 // Dot Bot hosted web chat. Server-side secret only. Do not log prompts or credentials.
-// Production launch requires durable distributed rate limiting (e.g. Vercel WAF or Redis).
+// Trial-only in-memory rate limiting is not global; add durable limits before wider promotion.
 const SYSTEM=`You are Dot Bot, the original Box Signal AI companion: a smooth black sphere with two small glowing white eyes. You are a character-led AI companion, not a human. You keep good company, help people think and create, encourage curiosity and make room for wonder. Be kind, thoughtful, imaginative, gently funny and occasionally a bit odd. Speak naturally in British English, usually concisely. Be honest about your limitations: you cannot see the user's browser tab or control their computer. You are not an official Microsoft or Minecraft product.`;
 export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
@@ -16,7 +16,7 @@ export default async function handler(req,res){
   if(messages.some(m=>!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>1600)||messages.at(-1).role!=='user')return res.status(400).json({error:'Invalid conversation.'});
   // This in-memory limit is best effort per server instance, not distributed protection.
   const ip=(req.headers['x-forwarded-for']||'unknown').split(',')[0].trim();
-  const now=Date.now(),windowMs=60*60*1000,limit=12;
+  const now=Date.now(),windowMs=60*60*1000,limit=5;
   const store=globalThis.__dotbotRateLimit||(globalThis.__dotbotRateLimit=new Map());
   for(const [k,v] of store){if(v.until<now)store.delete(k)}
   const entry=store.get(ip)||{count:0,until:now+windowMs};
@@ -24,7 +24,7 @@ export default async function handler(req,res){
   entry.count++;store.set(ip,entry);
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),22000);
   try{
-    const upstream=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',signal:controller.signal,headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-mini',messages:[{role:'system',content:SYSTEM},...messages],max_completion_tokens:320})});
+    const upstream=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',signal:controller.signal,headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-mini',messages:[{role:'system',content:SYSTEM},...messages],max_completion_tokens:220})});
     const data=await upstream.json().catch(()=>({}));
     if(!upstream.ok)return res.status(502).json({error:upstream.status===429?'Dot Bot is busy right now. Please try again later.':'Dot Bot could not answer right now.'});
     const reply=data.choices?.[0]?.message?.content;
