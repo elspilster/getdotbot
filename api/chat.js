@@ -5,7 +5,8 @@ const MODES={
 chat:'Keep the conversation open, friendly and curious.',
 windows:'Help with Windows 10 and 11 using clear, cautious step-by-step guidance. Do not claim to open settings or access the computer. Ask for the Windows version if it matters.',
 creative:'Help the user create stories, artwork ideas, characters, games and other imaginative projects. Be playful and collaborative.',
-minecraft:'Help with Minecraft gameplay, building and ideas. Clarify Java or Bedrock when important. You are independent and not affiliated with Mojang or Microsoft.'
+minecraft:'Help with Minecraft gameplay, building and ideas. Clarify Java or Bedrock when important. You are independent and not affiliated with Mojang or Microsoft.',
+internet:'Act as a friendly guide to the internet. Explain web findings simply, distinguish facts from uncertainty, cite sources, and never pretend to have visited sites beyond the search results. Do not claim to control the browser.'
 };
 export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
@@ -31,11 +32,16 @@ export default async function handler(req,res){
   entry.count++;store.set(ip,entry);
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),22000);
   try{
-    const upstream=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',signal:controller.signal,headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-mini',messages:[{role:'system',content:SYSTEM+' Current optional help mode: '+MODES[mode]},...messages],max_completion_tokens:220})});
+    const isInternet=mode==='internet';
+    const endpoint=isInternet?'https://api.openai.com/v1/responses':'https://api.openai.com/v1/chat/completions';
+    const payload=isInternet?{model:'gpt-4.1-mini',tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',input:[{role:'system',content:SYSTEM+' '+MODES.internet},...messages],max_output_tokens:420}:{model:'gpt-4.1-mini',messages:[{role:'system',content:SYSTEM+' Current optional help mode: '+MODES[mode]},...messages],max_completion_tokens:220};
+    const upstream=await fetch(endpoint,{method:'POST',signal:controller.signal,headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await upstream.json().catch(()=>({}));
     if(!upstream.ok)return res.status(502).json({error:upstream.status===429?'Dot Bot is busy right now. Please try again later.':'Dot Bot could not answer right now.'});
-    const reply=data.choices?.[0]?.message?.content;
+    const output=isInternet?data.output?.filter(x=>x.type==='message').flatMap(x=>x.content||[]).filter(x=>x.type==='output_text')||[]:[];
+    const reply=isInternet?output.map(x=>x.text||'').join('\n').trim():data.choices?.[0]?.message?.content;
+    const sources=isInternet?[...new Map(output.flatMap(x=>x.annotations||[]).filter(x=>x.type==='url_citation'&&/^https?:\/\//.test(x.url||'')).map(x=>[x.url,{url:x.url,title:String(x.title||new URL(x.url).hostname).slice(0,120)}])).values()].slice(0,6):[];
     if(typeof reply!=='string'||!reply.trim())return res.status(502).json({error:'No reply was received.'});
-    return res.status(200).json({reply});
+    return res.status(200).json({reply,sources});
   }catch(e){return res.status(502).json({error:e.name==='AbortError'?'Dot Bot took too long to answer.':'Dot Bot could not connect. Please try again.'})}finally{clearTimeout(timer)}
 }
